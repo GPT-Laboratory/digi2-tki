@@ -1,0 +1,35 @@
+{
+	auto_https off
+}
+
+localhost:80 {
+	# Chronograf HTTP TCP/8888
+	handle /chronograf* {
+		reverse_proxy http://chronograf:8888
+	}
+
+	# Grafana HTTP TCP/3000
+	handle /grafana* {
+		reverse_proxy http://grafana:3000
+	}
+
+	# Telegraf RPC TCP/8080
+	handle /telegraf* {
+		reverse_proxy http://telegraf:8080
+	}
+	# Telegraf StatsD UDP/8125
+	# not in use
+	#handle_path /telegraf/statsd* {
+	#	reverse_proxy udp/telegraf:8125
+	#}
+
+	# Influx HTTP TCP/8086
+	route * {
+		reverse_proxy http://influxdb:8086
+	}
+	# Influx RPC TCP/8089
+	# not in use
+	#handle_path /influxdb/rpc/tcp* {
+	#	reverse_proxy influxdb:8089
+	#}
+}

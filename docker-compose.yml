@@ -1,0 +1,155 @@
+version: "3.7"
+
+services:
+  proxy:
+    image: caddy:2-alpine
+    hostname: proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy-storage:/data
+    restart: unless-stopped
+
+  influxdb:
+    image: influxdb:2-alpine
+    hostname: influxdb
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb-storage:/var/lib/influxdb2
+      - ./influxdb/scripts:/docker-entrypoint-initdb.d
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    hostname: mosquitto
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/password_file:/etc/mosquitto/password_file:ro
+      - mosquitto-storage:/mosquitto/data/
+    ports:
+      - "1883:1883"
+    restart: unless-stopped
+
+  telegraf:
+    image: telegraf:1.31-alpine
+    hostname: telegraf
+    volumes:
+      - ./telegraf/etc/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    depends_on:
+      - influxdb
+      - mqtt
+    links:
+      - influxdb
+      - mqtt
+    ports:
+      - "127.0.0.1:8125:8125/udp"
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  telegraf-fmi:
+    image: telegraf:1.31-alpine
+    hostname: fmi
+    volumes:
+      - ./telegraf-fmi/etc/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    depends_on:
+      - influxdb
+    links:
+      - influxdb
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  kapacitor:
+    image: kapacitor:1.7-alpine
+    hostname: kapacitor
+    environment:
+      - KAPACITOR_HOSTNAME=kapacitor
+      - KAPACITOR_REPORTING_ENABLED=false
+      - KAPACITOR_LOGGING_LEVEL=${KAPACITOR_LOGGING_LEVEL}
+      - KAPACITOR_INFLUXDB_0_URLS_0=${INFLUXDB_URL}
+      - KAPACITOR_INFLUXDB_0_TOKEN=${INFLUXDB_TOKEN}
+      - KAPACITOR_INFLUXDB_0_KAPACITOR_HOSTNAME=kapacitor
+      - TZ=${KAPACITOR_TZ}
+      - INFLUX_ORG={INFLUX_ORG}
+    ports:
+      - "127.0.0.1:9092:9092"
+    volumes:
+      - ./kapacitor/etc/kapacitor.conf:/etc/kapacitor/kapacitor.conf:ro
+      - kapacitor-storage:/var/lib/kapacitor
+    depends_on:
+      - influxdb
+    restart: unless-stopped
+
+  chronograf:
+    image: chronograf:1.10-alpine
+    hostname: chronograf
+    ports:
+      - "127.0.0.1:8888:8888"
+    volumes:
+      - chronograf-storage:/var/lib/chronograf
+    depends_on:
+      - influxdb
+      - kapacitor
+    links:
+      - influxdb
+    environment:
+      - INFLUXDB_URL=${INFLUXDB_URL}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+      - INFLUX_TOKEN=${INFLUXDB_TOKEN}
+      - INFLUXDB_ORG=${INFLUXDB_ORGANIZATION}
+      - INFLUX_ORG=${INFLUXDB_ORGANIZATION}
+      - KAPACITOR_URL=${KAPACITOR_URL}
+      - BASE_PATH=${CHRONOGRAF_BASE_PATH}
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana-oss:10.4.2
+    hostname: grafana
+    volumes:
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/custom.ini:/etc/grafana/grafana.ini
+      - grafana-storage:/var/lib/grafana
+    depends_on:
+      - influxdb
+    ports:
+      - "127.0.0.1:3000:3000"
+    secrets:
+      - grafana_password
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_password
+      - GF_SERVER_ROOT_URL=/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - INFLUXDB_URL=${INFLUXDB_URL}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+      - INFLUXDB_ORGANIZATION=${INFLUXDB_ORGANIZATION}
+    restart: unless-stopped
+
+secrets:
+   grafana_password:
+     file: ./grafana/admin_password.txt
+
+volumes:
+  influxdb-storage:
+    name: influxdb-storage
+    external: true
+  chronograf-storage:
+    name: chronograf-storage
+    external: true
+  kapacitor-storage:
+    name: kapacitor-storage
+    external: true
+  mosquitto-storage:
+    name: mosquitto-storage
+    external: true
+  grafana-storage:
+    name: grafana-storage
+    external: true
+  caddy-storage:
+    name: caddy-storage
+    external: true
