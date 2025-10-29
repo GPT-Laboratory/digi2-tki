@@ -1,0 +1,30 @@
+.tooltipOnlineTicker {
+  position: absolute;
+  top: 0.5em;
+  right: 0.75em;
+  font-weight: bold;
+}
+.tooltipOnlineTicker.online {
+  color: green;
+}
+.tooltipOnlineTicker.offline {
+  color: red;
+}
+
+.gauge {
+  background-color: #f4f4f4;
+  margin-bottom: 0.5em;
+}
+.gaugePopup {
+  min-width: 200px;
+}
+
+.detailedInfo {
+  width: 100%;
+  height: 100%;
+  background: white;
+}
+
+.alert {
+ background-color: tomato;
+}

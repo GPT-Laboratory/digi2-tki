@@ -1,0 +1,9 @@
+# building, for example : $ docker build -t digi2-pilotti:1.2.0 -t digi2-pilotti:latest .
+# running: $ docker compose up -d
+services:
+  mapformer:
+    container_name: digi2pilotti
+    image: "digi2-pilotti:latest"
+    ports:
+      - "127.0.0.1:55560:3000"
+    restart: unless-stopped

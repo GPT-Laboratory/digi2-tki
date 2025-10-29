@@ -1,0 +1,4 @@
+/* SVG Marker Classes */
+.transparent path#center {
+  display: none !important;
+}
