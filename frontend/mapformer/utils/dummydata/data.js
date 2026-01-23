@@ -35,4 +35,13 @@ export const sites = [
       zoom: 16,
     },
   },
+ {
+    id: "5",
+    name: "DIGI2 - Työtehtävien digitaalinen kaksonen (demo)",
+    description: "Digitaalinen kaksonen työtehtävien hallinnassa",
+    options: {
+      location: { lat: 61.492330, lon: 21.800463 },
+      zoom: 17,
+    },
+  },
 ];

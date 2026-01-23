@@ -38,4 +38,5 @@ export interface DataPoint<Type> {
 export enum QueryType {
   LAST = "LAST",
   ORDERS = "ORDERS",
+  TASKS = "TASKS",
 }

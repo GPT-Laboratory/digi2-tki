@@ -2,8 +2,6 @@ import { DataPoint, POI, Site, QueryType } from "@/utils/types";
 import { getPOI, getSite } from "@/utils/dataHelper";
 import { HOST, MEASUREMENT, queryApi, writeApi, Point } from "@/utils/influxdb";
 
-import { randomUUID } from "crypto";
-
 export async function GET(request: any, {params}: any) {
   let retval = await getDataPoints(params.id, params.poiId);
   if(retval){
@@ -36,7 +34,8 @@ export async function POST(request: any, {params}: any) {
       .tag('host', host) // this is (sometimes) HARD CODED by application
       .tag('json', poi.options?.mqtt?.topics[0] as string)
       .tag('location', poi.options?.mqtt?.prefix.split("/").pop() as string)
-      .tag('name', dp.name) // from request BODY / datapoint
+      .tag('name', dp.name) // from request BODY / datapoint // NOTE .tag 'name' is only required for case 'orders'
+      //NOTE .tag 'task' is only required for case 'tasks'
     points.push(point);
   });
 
@@ -80,21 +79,25 @@ async function getDataPoints(siteId: string, poiId: string){
     const dataset: Map<string, DataPoint<any>> = new Map();
 
     await queryApi().collectRows(fluxQuery, (row, meta) => {
-      const topicIndex = topics.findIndex(topic => ( meta.get(row, "datapoint").startsWith(topic) ));
+      let key:string = meta.get(row, "datapoint");
+      if(poi.options.mqtt?.queryType == QueryType.TASKS){
+        key += "/" + meta.get(row, "task")
+      }
+      const topicIndex = topics.findIndex(topic => ( key.startsWith(topic) ));
       if(topicIndex === -1){
         return;
       }
-      let dp = dataset.get(meta.get(row, "datapoint")); // get data (if any) by topic
+      let dp = dataset.get(key); // get previously instantiated data (if any) by key, ie. topic
       const topicVariables = poi.options.mqtt?.variables ? poi.options.mqtt?.variables.at(topicIndex) : null;
 
       if(!!!dp){ // instantiate if not already done
         dp = {
-          id: randomUUID(),
+          id: key,
           value: (topicVariables === null || topicVariables === undefined) ? null : {},
           timestamp: new Date(meta.get(row, "_time")).valueOf(),
           topic: meta.get(row, "datapoint"),
         } as DataPoint<any>;
-        dataset.set(meta.get(row, "datapoint"), dp);
+        dataset.set(key, dp);
       }
       if(topicVariables && topicVariables.find((variable) => variable === "*")){ // variables: ["*"]
         dp.value = ({...dp.value, [meta.get(row, "_field")]: meta.get(row, "_value")});
@@ -104,8 +107,10 @@ async function getDataPoints(siteId: string, poiId: string){
           dp.ts = ({...dp.ts, [meta.get(row, "_field")]: new Date(meta.get(row, "lastOrderDate")).valueOf()});
           dp.lastActivity = ({...dp.lastActivity, [meta.get(row, "_field")]: new Date(meta.get(row, "_time")).valueOf()});
         }
-      } else if(topicVariables && topicVariables.find((variable) => meta.get(row, "_field") === variable)){
+      }else if(topicVariables && topicVariables.find((variable) => meta.get(row, "_field") === variable)){ // this is the old style where each variable is onw own row as _field & _value
         dp.value = ({...dp.value, [meta.get(row, "_field")]: meta.get(row, "_value")});
+      }else if(topicVariables){ // this is the improved style where variables are pivoted to columns, and each row is a new datapoint
+        topicVariables.forEach((variable) => dp.value = ({...dp.value, [variable]: meta.get(row, variable)}));
       }else{ // variables: [""] or null
         dp.value = meta.get(row, "_value");
       }
@@ -126,7 +131,7 @@ function findPOI(siteId: string, poiId: string): POI|undefined{
 }
 
 function getQuery(queryType: string, datapointFilter: string){
-  let startTime:string, fn: string, additionalQuery: string;
+  let startTime:string, fn: string, additionalQuery: string, filter: string;
   if(queryType === QueryType.ORDERS){
     startTime = "2022-01-01";
     fn = `dataFn = origData
@@ -138,18 +143,42 @@ function getQuery(queryType: string, datapointFilter: string){
   	  |> fill(column: "lastOrderDate", usePrevious: true)
       |> last()`;
     additionalQuery = `|> yield(name: "fn")`;
+    filter = `and r.json == "${QueryType.ORDERS.toLowerCase()}"`;
+  } else if(queryType === QueryType.TASKS){
+    startTime = "2025-01-01";
+    fn = `dataFn = data
+      |> pivot(rowKey:["task","_time"], columnKey: ["_field"], valueColumn: "_value")
+      |> sort(columns: ["_time"])
+      |> fill(column: "assigned_staff", usePrevious: true)
+      |> fill(column: "description", usePrevious: true)
+      |> fill(column: "due_date", usePrevious: true)
+      |> fill(column: "end_date", usePrevious: true)
+      |> fill(column: "internal_id", usePrevious: true)
+      |> fill(column: "lat", usePrevious: true)
+      |> fill(column: "long", usePrevious: true)
+      |> fill(column: "name", usePrevious: true)
+      |> fill(column: "notes", usePrevious: true)
+      |> fill(column: "priority", usePrevious: true)
+      |> fill(column: "scheduled_begin", usePrevious: true)
+      |> fill(column: "status", usePrevious: true)
+      |> fill(column: "workload", usePrevious: true)
+      |> fill(column: "worktype", usePrevious: true)
+      |> last(column: "_time")`;
+    additionalQuery = `|> yield(name: "fn")`;
+    filter = `and r.json == "${QueryType.TASKS.toLowerCase()}"`;
   }else{
     startTime = "-1d";
     fn = `dataFn = data
       |> last()`;
     additionalQuery = '|> yield(name: "fn")';
+    filter = ''
   }
   return `import "strings"
 import "internal/debug"
     origData = from(bucket: "telegraf")
       |> range(start: ${startTime})
       |> filter(fn: (r) => r["_measurement"] == "${MEASUREMENT}")
-      |> filter(fn: (r) => exists r.datapoint ${ queryType === QueryType.ORDERS ? ' and r.json == "orders"' : ''})
+      |> filter(fn: (r) => exists r.datapoint ${ filter })
       |> filter(fn: (r) => strings.hasPrefix(v: r.datapoint, prefix: "${datapointFilter}/"))
 
     data = origData

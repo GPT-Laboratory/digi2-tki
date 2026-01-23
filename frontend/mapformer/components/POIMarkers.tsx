@@ -1,42 +1,54 @@
 import { poiDataResolver } from '@/utils/helpers';
 import { getColoredMarker, resolveMarkerIcon, resolveMarkerIconColor } from '@/utils/mapHelpers';
-import { POI, Site } from '@/utils/types'
+import { POI, QueryType, Site } from '@/utils/types'
 import { SensorData } from '@/components/SensorData';
 import styles from "@/components/gauges/Sensor.module.css";
 
-import { Marker,Popup, useMap } from 'react-leaflet'
+import { Marker, Popup, useMap } from 'react-leaflet'
 import { useState } from 'react';
 import { Link } from '@mui/material';
 
 export default function POIMarkers(
   {site, POIs, sensorsActive}: {site: Site, POIs: Array<POI> | undefined | null, sensorsActive: boolean}
 ){
-  const [debugCounter, setDebugCounter] = useState(0);
-
   return(
     <>
       {POIs && POIs.map(poi => (
-        <Marker
-          position={[poi.options.location.lat, poi.options.location.lon]}
-          icon={getColoredMarker({colorName: resolveMarkerIconColor(poi), transparent: false})}
-          opacity={0.85}
-          key={poi.id}
-          eventHandlers={{
-            dblclick: (event) => setDebugCounter(debugCounter+1),
-          }}
-        >
-          <Popup autoPan={false} closeButton={false}>
-            <div className={styles.gaugePopup}>
-              <h4 title={poi.description}>{poi.name}</h4>
-              { poi.options.mqtt && <SensorData site={site} poi={poi} sensorsActive={sensorsActive} /> }
-              <ImageResolver poi={poi} />
-              <InfluxData poi={poi} />
-              { debugCounter >= 4 && <DebugData poi={poi} /> }
-            </div>
-          </Popup>
-        </Marker>
+        <POIMarker key={poi.id} site={site} poi={poi} sensorsActive={sensorsActive} preload={poi.options.mqtt?.queryType === QueryType.TASKS} />
       ))};
     </>
+  )
+}
+
+function POIMarker(
+  {site, poi, sensorsActive, preload}: {site: Site, poi: POI, sensorsActive: boolean, preload: boolean}
+){
+  const [debugCounter, setDebugCounter] = useState(0);
+
+  return(
+    <div>
+      <Marker
+        position={[poi.options.location.lat, poi.options.location.lon]}
+        icon={getColoredMarker({colorName: resolveMarkerIconColor(poi), transparent: false})}
+        opacity={0.85}
+        eventHandlers={{
+          dblclick: (event) => setDebugCounter(debugCounter+1),
+          add: (event) => { if(preload){ event.target.openPopup()} }, // to preload/open the popup and childs
+        }}
+        title={poi.name}
+      >
+        <Popup autoPan={false} closeButton={false}>
+          <div className={styles.gaugePopup}>
+            <h4 title={poi.description}>{poi.name}</h4>
+            { poi.options.mqtt && <SensorData site={site} poi={poi} sensorsActive={sensorsActive} /> }
+            <ImageResolver poi={poi} />
+            <InfluxData poi={poi} />
+            { debugCounter >= 4 && <DebugData poi={poi} /> }
+          </div>
+        </Popup>
+      </Marker>
+      <DataPointPortalContainer poi={poi} />
+    </div>
   )
 }
 
@@ -85,3 +97,7 @@ function InfluxData(
     return null;
   };
 };
+
+function DataPointPortalContainer({ poi, children }: { poi: POI, children?: React.ReactNode }) {
+  return <div id={poi.id+"_dp-container"}>{children}</div>;
+}

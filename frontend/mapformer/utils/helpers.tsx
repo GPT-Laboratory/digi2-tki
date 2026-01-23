@@ -37,8 +37,8 @@ export function lastActivityTimestamper(activityText: string, timestamp: number)
 }
 
 // Fetch data from an external API
-export async function getExternalData(path: string): Promise<Response> {
-  const response = fetch(`${process.env.URL}/${path}`);
+export async function getExternalData(path: string, skipCache: boolean = false): Promise<Response> {
+  const response = fetch(`${process.env.URL}/${path}`, { cache: skipCache ? "no-store" : "default"});
 
   if (!(await response).ok) {
     // This will activate the closest `error.js` Error Boundary

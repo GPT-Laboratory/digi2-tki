@@ -1,4 +1,4 @@
-import { Site, POI, DataPoint } from "@/utils/types";
+import { Site, POI, DataPoint, QueryType } from "@/utils/types";
 import { lastActivityTimestamper } from "@/utils/helpers";
 
 import GaugeBasic from "@/components/gauges/BasicGauge";
@@ -6,6 +6,7 @@ import GaugeOnline from "@/components/gauges/GaugeOnline";
 import PieGauge from "@/components/gauges/PieGauge";
 import styles from "@/components/gauges/Sensor.module.css";
 import { GaugeOrders } from "@/components/gauges/OrderGauge";
+import { GaugeTasks } from "@/components/gauges/TaskGauge";
 
 import { useEffect, useState } from "react";
 
@@ -36,6 +37,7 @@ export function SensorData({site, poi, sensorsActive}: {site: Site, poi: POI, se
         })
         .catch((error) => {
           console.log(error);
+          setData(null);
           setError(true);
           setLoading(false);
         });
@@ -56,7 +58,7 @@ export function SensorData({site, poi, sensorsActive}: {site: Site, poi: POI, se
     <>
       {
       poi.options.mqtt?.topics.map((topic: string, index: number) => (
-        resolveSensorComponent(topic, poi, index, data, updateDataHelper, postDataHelper)
+        resolveSensorComponent(site, topic, poi, index, data, updateDataHelper, postDataHelper)
       ))}
     </>
   );
@@ -78,41 +80,45 @@ export function addDataPoint(siteId: string, poiId: string, newDataPoints: Array
     return response
 }
 
-function resolveSensorComponent(topic: string, poi: POI, index: number, data: Array<DataPoint<any>>, updateData: Function, addData: Function){
-  let dataPoint = data.find((dp) => ( dp.topic ? dp.topic.endsWith(topic) : false ));
+function resolveSensorComponent(site: Site, topic: string, poi: POI, index: number, data: Array<DataPoint<any>>, updateData: Function, addData: Function){
+  let dataPoints = data.filter((dp) => ( dp.topic ? dp.topic.endsWith(topic) : false ));
   let variables = poi.options.mqtt!.variables ? poi.options.mqtt!.variables[index] : [""];
-  if(dataPoint === undefined){
+  if(dataPoints.length < 1){
     return undefined;
   }
+  let firstDataPoint = dataPoints.at(0)!; // kind'a hack, but most of the time there is only one datapoint result. The modules which can handle more shall request the whole array
   
   let dataElement;
   switch(topic){
     // actually the following case should be resolved from the POI's MQTT variables field
     case "online":
-      dataElement = <GaugeOnline value={dataPoint.value} timestamp={dataPoint.timestamp} />;
+      dataElement = <GaugeOnline value={firstDataPoint.value} timestamp={firstDataPoint.timestamp} />;
       break;
     // actually the two following cases should be resolved from the POI's unit field
     case "sensor/temperature":
     case "status/temperature:0":
-      dataElement = <GaugeBasic value={Number.parseFloat(dataPoint.value)} min={10} max={40} unit={poi.unit[index]} />
+      dataElement = <GaugeBasic value={Number.parseFloat(firstDataPoint.value)} min={10} max={40} unit={poi.unit[index]} />
       break;
     case "sensor/humidity":
     case "status/humidity:0":
-      dataElement = <GaugeBasic value={Number.parseFloat(dataPoint.value)} min={0} max={100} unit={poi.unit[index]} />
+      dataElement = <GaugeBasic value={Number.parseFloat(firstDataPoint.value)} min={0} max={100} unit={poi.unit[index]} />
       break;
     case "water:K":
     case "water:L":
-      dataElement = <h3>{dataPoint.value} {poi.unit} @ {new Date(dataPoint.timestamp).toLocaleString()}</h3>
+      dataElement = <h3>{firstDataPoint.value} {poi.unit} @ {new Date(firstDataPoint.timestamp).toLocaleString()}</h3>
       break;
     case "orders":
-      dataElement = <GaugeOrders poi={poi} dataPoint={dataPoint} updateData={updateData} addData={addData} />
+      dataElement = <GaugeOrders poi={poi} dataPoint={firstDataPoint} updateData={updateData} addData={addData} />
+      break;
+    case "tasks":
+      dataElement = <GaugeTasks site={site} poi={poi} dataPoints={dataPoints} updateData={updateData} addData={addData} />
       break;
     default:
-      dataElement = <PieGauge value={dataPoint.value} variables={variables} index={index} unit={poi.unit} />
+      dataElement = <PieGauge value={firstDataPoint.value} variables={variables} index={index} unit={poi.unit} />
       break;
   }
-  return <div key={dataPoint!.id} className={styles.gauge}>
-    <div title={lastActivityTimestamper('', dataPoint.timestamp)}>{topic !== 'online' && topic !== 'orders' ? topic : "" }</div>
+  return <div key={firstDataPoint!.id} className={styles.gauge}>
+    <div title={lastActivityTimestamper('', firstDataPoint.timestamp)}>{topic !== 'online' && topic !== QueryType.ORDERS.toLowerCase() && topic !== QueryType.TASKS.toLowerCase() ? topic : "" }</div>
     {dataElement}
   </div>
 }

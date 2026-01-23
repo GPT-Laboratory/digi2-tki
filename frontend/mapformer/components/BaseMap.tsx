@@ -75,7 +75,8 @@ export default function BaseMap(
               layerGroup={layerRef as MutableRefObject<any>} />
           </LayerGroup>
         </LayersControl.Overlay>}
-        <LayersControl.Overlay name="Kohde" checked>
+        {/* hide site marker only when a hard-coded id is met */}
+        <LayersControl.Overlay name="Kohde" checked={(site.id === "5" || site.id === "6") ? false : true}>
           <LayerGroup>
             <SiteMarker site={site} />
           </LayerGroup>

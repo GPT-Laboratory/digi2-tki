@@ -4,6 +4,7 @@ import { sites as DummyData } from "./data"
 import { ulkovalot as DummyUlkovaloData } from "./uv_data"
 import { varastodata as DummyVarastoData } from "./varasto_data"
 import { mittausadata as DummyMittausData } from "./mittaus_data"
+import { tehtavadata as DummyTehtavaData } from "./tehtava_data"
 
 import { randomUUID } from "crypto";
 
@@ -21,6 +22,8 @@ export function getSite(siteId: string): Site|undefined {
 export function getPOIs(site: Site): Array<POI> {
   if(site.id === "1"){
     return DummyUlkovaloData;
+  }else if(site.id === "5"){
+    return DummyTehtavaData;
   }else if(site.id === "2"){
     return DummyMittausData;
   }else if(site.id === "3"){
